@@ -1,24 +1,50 @@
+import re
 import streamlit as st
 import pandas as pd
 import numpy as np
 import io
 import matplotlib.pyplot as plt
 
+def extract_time_options(filename):
+    # Find all 'number + space + word' patterns in the filename
+    # Exclude those immediately followed by mg or mgmL (case-insensitive)
+    matches = re.findall(r'(\d+\s*\w+)', filename)
+    # Exclude concentration matches (mg, mgmL, etc)
+    filtered = [m for m in matches if not re.search(r'(mg|mgml)', m, re.IGNORECASE)]
+    # Remove duplicates, clean whitespace, and return as list
+    return list({x.strip() for x in filtered})
+
 st.title("Archimedes vs DLS Data Comparison App")
 
-# --- ARCHIMEDES DATA UPLOAD ---
+# --- ARCHIMEDES 1 DATA UPLOAD & TIME PICKER ---
 st.header("Step 1: Upload Archimedes Files (label each population)")
+
 arch_file1 = st.file_uploader("Upload first Archimedes CSV", type=["csv"], key="arch1")
-arch_timepoint1 = st.text_input("Enter Archimedes time point for first file (e.g., 60 min):", key="arch_tp1")
 arch_label1 = st.radio("First file: Select particle population", 
     ["Positively Buoyant Particles", "Negatively Buoyant Particles"], key="label1")
 
+arch_timepoint1 = ""
+if arch_file1 is not None:
+    time_options1 = extract_time_options(arch_file1.name)
+    if time_options1:
+        arch_timepoint1 = st.selectbox("Select time point from filename for first file:", time_options1, key="tp1")
+    else:
+        arch_timepoint1 = st.text_input("Enter Archimedes time point for first file (e.g., 60 min):", key="arch_tp1")
+
+# --- ARCHIMEDES 2 DATA UPLOAD & TIME PICKER ---
 arch_file2 = st.file_uploader("Upload second Archimedes CSV (optional)", type=["csv"], key="arch2")
-arch_timepoint2 = st.text_input("Enter Archimedes time point for second file (e.g., 60 min):", key="arch_tp2")
 arch_label2 = st.radio("Second file: Select particle population", 
     ["Positively Buoyant Particles", "Negatively Buoyant Particles"], key="label2")
 
-# Enforce unique choice per file
+arch_timepoint2 = ""
+if arch_file2 is not None:
+    time_options2 = extract_time_options(arch_file2.name)
+    if time_options2:
+        arch_timepoint2 = st.selectbox("Select time point from filename for second file:", time_options2, key="tp2")
+    else:
+        arch_timepoint2 = st.text_input("Enter Archimedes time point for second file (e.g., 60 min):", key="arch_tp2")
+
+# --- Enforce unique choice per file ---
 if arch_label1 == arch_label2 and arch_file2 is not None:
     st.warning("You cannot assign the same population label to both files. Please pick one Positively and one Negatively Buoyant.")
     st.stop()
