@@ -125,8 +125,12 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     df_out[dls_series_label] = interp_dls_norm
 
     # --- GRAPH SECTION ---
+    # ... keep your code as above, then in the visualization section:
+
     st.header("Step 3: Visualization")
     user_title = st.text_input("Enter graph title:", "Archimedes vs DLS Comparison")
+    legend_fontsize = st.slider("Legend font size", min_value=8, max_value=30, value=14)
+
     fig, ax = plt.subplots(figsize=(8, 5))
 
     for curve in arch_curves:
@@ -140,9 +144,10 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     ax.set_xlabel("Diameter (nm)")
     ax.set_ylabel("Normalized value (a.u.)")
     ax.set_ylim(0, 1.05)
-    ax.legend()
+    ax.legend(fontsize=legend_fontsize)   # <--- Use slider value here!
     ax.set_title(user_title)
     st.pyplot(fig)
+
 
     # Download SVG
     svg_buffer = io.StringIO()
