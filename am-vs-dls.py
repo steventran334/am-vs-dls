@@ -6,48 +6,52 @@ import io
 import matplotlib.pyplot as plt
 
 def extract_time_options(filename):
-    # Find all 'number + space + word' patterns in the filename
-    # Exclude those immediately followed by mg or mgmL (case-insensitive)
     matches = re.findall(r'(\d+\s*\w+)', filename)
-    # Exclude concentration matches (mg, mgmL, etc)
     filtered = [m for m in matches if not re.search(r'(mg|mgml)', m, re.IGNORECASE)]
-    # Remove duplicates, clean whitespace, and return as list
     return list({x.strip() for x in filtered})
+
+def process_arch_file(arch_file, arch_label):
+    if arch_file is None or arch_label is None:
+        return None, None, None, None
+    # Extract timepoint from filename (first found)
+    time_options = extract_time_options(arch_file.name)
+    arch_timepoint = time_options[0] if time_options else ""
+    arch_df = pd.read_csv(arch_file, skiprows=60)
+    arch_df = arch_df[pd.to_numeric(arch_df["Bin Center"], errors="coerce").notna()]
+    arch_df = arch_df[["Bin Center", "Average"]].copy()
+    arch_df["Bin Center (nm)"] = pd.to_numeric(arch_df["Bin Center"], errors='coerce') * 1000
+    arch_df = arch_df[["Bin Center (nm)", "Average"]].reset_index(drop=True)
+    label = f"AM - {arch_label} (normalized)"
+    arch_df.columns = ["Archimedes Bin Center (nm)", label]
+    return arch_df["Archimedes Bin Center (nm)"].values, arch_df[label].values, arch_df, label, arch_timepoint
 
 st.title("Archimedes vs DLS Data Comparison App")
 
-# --- ARCHIMEDES 1 DATA UPLOAD & TIME PICKER ---
-st.header("Step 1: Upload Archimedes Files (label each population)")
+# --- ARCHIMEDES DATA UPLOAD (MULTI-FILE) ---
+st.header("Step 1: Upload all POS/NEG Archimedes files for each population")
 
-arch_file1 = st.file_uploader("Upload first Archimedes CSV", type=["csv"], key="arch1")
-arch_label1 = st.radio("First file: Select particle population", 
-    ["Positively Buoyant Particles", "Negatively Buoyant Particles"], key="label1")
+arch_files1 = st.file_uploader("Upload all POS Archimedes CSVs (e.g., 5 min, 30 min, ...)", type=["csv"], key="arch1", accept_multiple_files=True)
+arch_files2 = st.file_uploader("Upload all NEG Archimedes CSVs (optional)", type=["csv"], key="arch2", accept_multiple_files=True)
 
-arch_timepoint1 = ""
-if arch_file1 is not None:
-    time_options1 = extract_time_options(arch_file1.name)
-    if time_options1:
-        arch_timepoint1 = st.selectbox("Select time point from filename for first file:", time_options1, key="tp1")
-    else:
-        arch_timepoint1 = st.text_input("Enter Archimedes time point for first file (e.g., 60 min):", key="arch_tp1")
+arch_label1 = "Positively Buoyant Particles"
+arch_label2 = "Negatively Buoyant Particles"
 
-# --- ARCHIMEDES 2 DATA UPLOAD & TIME PICKER ---
-arch_file2 = st.file_uploader("Upload second Archimedes CSV (optional)", type=["csv"], key="arch2")
-arch_label2 = st.radio("Second file: Select particle population", 
-    ["Positively Buoyant Particles", "Negatively Buoyant Particles"], key="label2")
+# Gather unique time points for each population
+pos_timepoints = []
+if arch_files1:
+    for f in arch_files1:
+        pos_timepoints.extend(extract_time_options(f.name))
+    pos_timepoints = sorted(list({tp for tp in pos_timepoints}))
 
-arch_timepoint2 = ""
-if arch_file2 is not None:
-    time_options2 = extract_time_options(arch_file2.name)
-    if time_options2:
-        arch_timepoint2 = st.selectbox("Select time point from filename for second file:", time_options2, key="tp2")
-    else:
-        arch_timepoint2 = st.text_input("Enter Archimedes time point for second file (e.g., 60 min):", key="arch_tp2")
+neg_timepoints = []
+if arch_files2:
+    for f in arch_files2:
+        neg_timepoints.extend(extract_time_options(f.name))
+    neg_timepoints = sorted(list({tp for tp in neg_timepoints}))
 
-# --- Enforce unique choice per file ---
-if arch_label1 == arch_label2 and arch_file2 is not None:
-    st.warning("You cannot assign the same population label to both files. Please pick one Positively and one Negatively Buoyant.")
-    st.stop()
+# Let user pick which timepoint to plot for each population
+pos_timepoint = st.selectbox("Select POS time point to plot:", pos_timepoints, key="pos_tp") if pos_timepoints else None
+neg_timepoint = st.selectbox("Select NEG time point to plot:", neg_timepoints, key="neg_tp") if neg_timepoints else None
 
 # --- DLS DATA OPTIONS ---
 st.header("Step 2: DLS Data Settings & Upload")
@@ -57,36 +61,37 @@ dls_file = st.file_uploader("Upload DLS Excel", type=["xlsx"], key="dls")
 
 dls_timepoint = None
 dls_timepoint_col = None
-
 if dls_file is not None:
     dls_df_preview = pd.read_excel(dls_file, header=1)
     dls_timepoint_options = [col for col in dls_df_preview.columns if col.lower() != "diameter (nm)"]
     dls_timepoint = st.selectbox("Select DLS time point:", dls_timepoint_options)
     dls_timepoint_col = dls_timepoint
 
-def process_arch_file(arch_file, arch_timepoint, arch_label):
-    if arch_file is None or not arch_timepoint or not arch_label:
-        return None, None, None, None
-    arch_df = pd.read_csv(arch_file, skiprows=60)
-    arch_df = arch_df[pd.to_numeric(arch_df["Bin Center"], errors="coerce").notna()]
-    arch_df = arch_df[["Bin Center", "Average"]].copy()
-    arch_df["Bin Center (nm)"] = pd.to_numeric(arch_df["Bin Center"], errors='coerce') * 1000
-    arch_df = arch_df[["Bin Center (nm)", "Average"]].reset_index(drop=True)
-    label = f"AM - {arch_label} (normalized)"
-    arch_df.columns = ["Archimedes Bin Center (nm)", label]
-    return arch_df["Archimedes Bin Center (nm)"].values, arch_df[label].values, arch_df, label
-
+# --- ARCHIMEDES CURVES: Only add if user has picked a timepoint and file exists for it
 arch_curves = []
-for arch_file, arch_timepoint, arch_label in [
-        (arch_file1, arch_timepoint1, arch_label1), 
-        (arch_file2, arch_timepoint2, arch_label2)]:
-    arch_bin_nm, arch_conc, arch_df, arch_curve_label = process_arch_file(arch_file, arch_timepoint, arch_label)
-    if arch_bin_nm is not None and arch_conc is not None and arch_df is not None:
-        arch_curves.append({
-            "bins": arch_bin_nm,
-            "conc": arch_conc,
-            "label": arch_curve_label,
-        })
+if pos_timepoint and arch_files1:
+    # Find file for selected POS timepoint
+    pos_file = next((f for f in arch_files1 if pos_timepoint in f.name), None)
+    if pos_file:
+        arch_bin_nm, arch_conc, arch_df, arch_curve_label, _ = process_arch_file(pos_file, arch_label1)
+        if arch_bin_nm is not None and arch_conc is not None and arch_df is not None:
+            arch_curves.append({
+                "bins": arch_bin_nm,
+                "conc": arch_conc,
+                "label": f"AM - {arch_label1} (normalized)",
+            })
+
+if neg_timepoint and arch_files2:
+    # Find file for selected NEG timepoint
+    neg_file = next((f for f in arch_files2 if neg_timepoint in f.name), None)
+    if neg_file:
+        arch_bin_nm, arch_conc, arch_df, arch_curve_label, _ = process_arch_file(neg_file, arch_label2)
+        if arch_bin_nm is not None and arch_conc is not None and arch_df is not None:
+            arch_curves.append({
+                "bins": arch_bin_nm,
+                "conc": arch_conc,
+                "label": f"AM - {arch_label2} (normalized)",
+            })
 
 # --- PROCESS & VISUALIZE ---
 if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
@@ -100,7 +105,6 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     all_bins = np.unique(np.concatenate([curve["bins"] for curve in arch_curves]))
     df_out = pd.DataFrame({"Archimedes Bin Center (nm)": all_bins})
 
-    # Interpolate & normalize each population
     def get_color(label):
         if "positively" in label.lower():
             return "blue"
@@ -112,12 +116,11 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     for curve in arch_curves:
         interp = np.interp(all_bins, curve["bins"], curve["conc"], left=np.nan, right=np.nan)
         interp_norm = interp / np.nanmax(interp) if np.nanmax(interp) > 0 else interp
-        df_out[curve["label"]] = interp_norm  # <--- Just use the label, no duplicate (normalized)
+        df_out[curve["label"]] = interp_norm
 
     # Interpolate DLS to same bins
     interp_dls = np.interp(all_bins, dls_diam_nm, dls_intensity, left=np.nan, right=np.nan)
     interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
-
     dls_series_label = f"DLS {dls_type} {dls_weight} (interpolated, normalized)"
     df_out[dls_series_label] = interp_dls_norm
 
@@ -163,4 +166,4 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 else:
-    st.info("Upload at least one Archimedes file (with label and time point) and a DLS file to process and visualize your data.")
+    st.info("Upload at least one Archimedes file per population (with a selected time point) and a DLS file to process and visualize your data.")
