@@ -23,9 +23,13 @@ if arch_label1 == arch_label2 and arch_file2 is not None:
     st.warning("You cannot assign the same population label to both files. Please pick one Positively and one Negatively Buoyant.")
     st.stop()
 
-# --- DLS DATA UPLOAD ---
-st.header("Step 2: Upload DLS Data (.xlsx)")
+# --- DLS DATA OPTIONS ---
+st.header("Step 2: DLS Data Settings & Upload")
+# DLS type selector
+dls_type = st.radio("Select DLS type:", ["Back scatter", "MADLS"], key="dls_type")
+dls_weight = st.radio("Select DLS weighting:", ["Intensity-weighted", "Volume-weighted", "Number-weighted"], key="dls_weight")
 dls_file = st.file_uploader("Upload DLS Excel", type=["xlsx"], key="dls")
+
 dls_timepoint = None
 dls_timepoint_col = None
 
@@ -44,7 +48,7 @@ def process_arch_file(arch_file, arch_timepoint, arch_label):
     arch_df = arch_df[["Bin Center", "Average"]].copy()
     arch_df["Bin Center (nm)"] = pd.to_numeric(arch_df["Bin Center"], errors='coerce') * 1000
     arch_df = arch_df[["Bin Center (nm)", "Average"]].reset_index(drop=True)
-    label = f"{arch_label} ({arch_timepoint})"
+    label = f"AM - {arch_label} ({arch_timepoint})"
     arch_df.columns = ["Archimedes Bin Center (nm)", label]
     return arch_df["Archimedes Bin Center (nm)"].values, arch_df[label].values, arch_df, label
 
@@ -73,23 +77,6 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     df_out = pd.DataFrame({"Archimedes Bin Center (nm)": all_bins})
 
     # Interpolate & normalize each population
-    colors = {"Positively Buoyant Particles": "blue", "Negatively Buoyant Particles": "green"}
-    for curve in arch_curves:
-        interp = np.interp(all_bins, curve["bins"], curve["conc"], left=np.nan, right=np.nan)
-        interp_norm = interp / np.nanmax(interp) if np.nanmax(interp) > 0 else interp
-        df_out[curve["label"] + " (normalized)"] = interp_norm
-
-    # Interpolate DLS to same bins
-    interp_dls = np.interp(all_bins, dls_diam_nm, dls_intensity, left=np.nan, right=np.nan)
-    interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
-    df_out["DLS Intensity (interpolated, normalized)"] = interp_dls_norm
-
-        # --- GRAPH SECTION ---
-    st.header("Step 3: Visualization")
-    user_title = st.text_input("Enter graph title:", "Archimedes vs DLS Comparison")
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    # Color mapping (robust to label content/case)
     def get_color(label):
         if "positively" in label.lower():
             return "blue"
@@ -98,23 +85,39 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
         else:
             return "gray"
 
-    # Plot each population
+    for curve in arch_curves:
+        interp = np.interp(all_bins, curve["bins"], curve["conc"], left=np.nan, right=np.nan)
+        interp_norm = interp / np.nanmax(interp) if np.nanmax(interp) > 0 else interp
+        df_out[curve["label"] + " (normalized)"] = interp_norm
+
+    # Interpolate DLS to same bins
+    interp_dls = np.interp(all_bins, dls_diam_nm, dls_intensity, left=np.nan, right=np.nan)
+    interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
+
+    # DLS label for legend and table
+    dls_series_label = f"DLS {dls_type} {dls_weight} (interpolated, normalized)"
+    df_out[dls_series_label] = interp_dls_norm
+
+    # --- GRAPH SECTION ---
+    st.header("Step 3: Visualization")
+    user_title = st.text_input("Enter graph title:", "Archimedes vs DLS Comparison")
+    fig, ax = plt.subplots(figsize=(8, 5))
+
     for curve in arch_curves:
         colname = curve["label"] + " (normalized)"
         ax.plot(df_out["Archimedes Bin Center (nm)"], df_out[colname],
                 '-o', color=get_color(curve["label"]), label=curve["label"])
 
-    # DLS always in red
+    # DLS always in red, with new legend
     ax.plot(df_out["Archimedes Bin Center (nm)"], 
-            df_out["DLS Intensity (interpolated, normalized)"],
-            '-s', color='red', label="DLS Intensity (interpolated, normalized)")
+            df_out[dls_series_label],
+            '-s', color='red', label=dls_series_label)
     ax.set_xlabel("Diameter (nm)")
     ax.set_ylabel("Normalized value (a.u.)")
     ax.set_ylim(0, 1.05)
     ax.legend()
     ax.set_title(user_title)
     st.pyplot(fig)
-
 
     # Download SVG
     svg_buffer = io.StringIO()
