@@ -6,72 +6,117 @@ import matplotlib.pyplot as plt
 
 st.title("Archimedes vs DLS Data Comparison App")
 
-# --- ARCHIMEDES DATA UPLOAD ---
-st.header("Step 1: Upload Archimedes Data (.csv)")
-arch_file = st.file_uploader("Upload Archimedes CSV", type=["csv"], key="arch")
-arch_timepoint = st.text_input("Enter Archimedes time point (e.g., 60 min):", key="arch_tp")
+# --- ARCHIMEDES 1 DATA UPLOAD ---
+st.header("Step 1: Upload Archimedes Data (.csv) for Positively Buoyant Particles")
+arch_file_pos = st.file_uploader("Upload Archimedes CSV (Positive)", type=["csv"], key="arch_pos")
+arch_timepoint_pos = st.text_input("Enter Archimedes time point (e.g., 60 min) for Positively Buoyant Particles:", key="arch_tp_pos")
+
+# --- ARCHIMEDES 2 DATA UPLOAD ---
+st.header("Step 2: Upload Archimedes Data (.csv) for Negatively Buoyant Particles")
+arch_file_neg = st.file_uploader("Upload Archimedes CSV (Negative)", type=["csv"], key="arch_neg")
+arch_timepoint_neg = st.text_input("Enter Archimedes time point (e.g., 60 min) for Negatively Buoyant Particles:", key="arch_tp_neg")
+
+# --- POPULATION SELECTOR ---
+st.header("Step 3: Choose Population to Display (only one can be checked at a time)")
+pos_check = st.checkbox("Positively Buoyant Particles", value=True)
+neg_check = st.checkbox("Negatively Buoyant Particles", value=False)
+if pos_check and neg_check:
+    st.warning("Only one population can be shown at a time! Please uncheck one.")
+    st.stop()
+if not pos_check and not neg_check:
+    st.info("Please check one population to visualize.")
+    st.stop()
 
 # --- DLS DATA UPLOAD ---
-st.header("Step 2: Upload DLS Data (.xlsx)")
+st.header("Step 4: Upload DLS Data (.xlsx)")
 dls_file = st.file_uploader("Upload DLS Excel", type=["xlsx"], key="dls")
 dls_timepoint = None
 dls_timepoint_col = None
+dls_diam_col = None
 
 if dls_file is not None:
-    # Show available timepoints as columns (after "Diameter (nm)")
-    dls_df = pd.read_excel(dls_file, header=1)
-    dls_timepoint_options = [col for col in dls_df.columns if col.lower() != "diameter (nm)"]
-    dls_timepoint = st.selectbox("Select DLS time point:", dls_timepoint_options)
+    dls_df_preview = pd.read_excel(dls_file, header=0)
+    dls_columns = dls_df_preview.columns.tolist()
+    dls_diam_col = dls_columns[0]
+    dls_timepoint_options = dls_columns[1:]
+    dls_timepoint = st.selectbox("Select DLS time point column:", dls_timepoint_options)
     dls_timepoint_col = dls_timepoint
 
-# --- DATA PROCESSING ---
-if arch_file is not None and dls_file is not None and arch_timepoint and dls_timepoint:
-    # Read and clean Archimedes
+def process_arch_file(arch_file, arch_timepoint):
+    if arch_file is None or not arch_timepoint:
+        return None, None, None
     arch_df = pd.read_csv(arch_file, skiprows=60)
-    # Remove non-numeric rows, keep only Bin Center and Average
     arch_df = arch_df[pd.to_numeric(arch_df["Bin Center"], errors="coerce").notna()]
     arch_df = arch_df[["Bin Center", "Average"]].copy()
     arch_df["Bin Center (nm)"] = pd.to_numeric(arch_df["Bin Center"], errors='coerce') * 1000
     arch_df = arch_df[["Bin Center (nm)", "Average"]].reset_index(drop=True)
     arch_df.columns = ["Archimedes Bin Center (nm)", f"Archimedes {arch_timepoint}"]
+    return arch_df["Archimedes Bin Center (nm)"].values, arch_df[f"Archimedes {arch_timepoint}"].values, arch_df
 
-    # Read and extract DLS
-    dls_df = pd.read_excel(dls_file, header=1)
-    dls_df = dls_df[["Diameter (nm)", dls_timepoint_col]].copy()
+if arch_file_pos is not None and arch_timepoint_pos and dls_file is not None and dls_timepoint:
+    # Process positive Archimedes
+    arch_bin_nm_pos, arch_conc_pos, arch_df_pos = process_arch_file(arch_file_pos, arch_timepoint_pos)
+else:
+    arch_bin_nm_pos, arch_conc_pos, arch_df_pos = None, None, None
+
+if arch_file_neg is not None and arch_timepoint_neg and dls_file is not None and dls_timepoint:
+    # Process negative Archimedes
+    arch_bin_nm_neg, arch_conc_neg, arch_df_neg = process_arch_file(arch_file_neg, arch_timepoint_neg)
+else:
+    arch_bin_nm_neg, arch_conc_neg, arch_df_neg = None, None, None
+
+# Only proceed if at least one Archimedes file and DLS file are valid
+if dls_file is not None and dls_timepoint and (arch_df_pos is not None or arch_df_neg is not None):
+    dls_df = pd.read_excel(dls_file, header=0)
+    dls_df = dls_df[[dls_diam_col, dls_timepoint_col]].copy()
     dls_df.columns = ["DLS Diameter (nm)", f"DLS {dls_timepoint}"]
-
-    # Interpolate DLS to Archimedes bins
-    arch_bin_nm = arch_df["Archimedes Bin Center (nm)"].values
-    arch_conc = arch_df[f"Archimedes {arch_timepoint}"].values
     dls_diam_nm = dls_df["DLS Diameter (nm)"].dropna().values
     dls_intensity = dls_df[f"DLS {dls_timepoint}"].dropna().values
 
-    interp_dls = np.interp(
-        arch_bin_nm,
-        dls_diam_nm,
-        dls_intensity,
-        left=np.nan,
-        right=np.nan
-    )
-    interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
-    arch_conc_norm = arch_conc / np.nanmax(arch_conc) if np.nanmax(arch_conc) > 0 else arch_conc
+    # Use union of all arch bin centers to define the common interpolation grid
+    bin_sets = []
+    if arch_bin_nm_pos is not None: bin_sets.append(set(arch_bin_nm_pos))
+    if arch_bin_nm_neg is not None: bin_sets.append(set(arch_bin_nm_neg))
+    arch_bin_union = np.array(sorted(set().union(*bin_sets))) if bin_sets else None
 
-    # Build output DataFrame
-    df_out = pd.DataFrame({
-        "Archimedes Bin Center (nm)": arch_bin_nm,
-        f"Archimedes {arch_timepoint} (raw)": arch_conc,
-        f"Archimedes {arch_timepoint} (normalized)": arch_conc_norm,
-        "DLS Intensity (interpolated, raw)": interp_dls,
-        "DLS Intensity (interpolated, normalized)": interp_dls_norm
-    })
+    # Interpolate all populations to the union grid, normalize each to its max
+    df_out = pd.DataFrame({"Archimedes Bin Center (nm)": arch_bin_union})
+    # Positive
+    if arch_bin_nm_pos is not None:
+        arch_conc_pos_interp = np.interp(arch_bin_union, arch_bin_nm_pos, arch_conc_pos, left=np.nan, right=np.nan)
+        arch_conc_pos_norm = arch_conc_pos_interp / np.nanmax(arch_conc_pos_interp) if np.nanmax(arch_conc_pos_interp) > 0 else arch_conc_pos_interp
+        df_out[f"Archimedes {arch_timepoint_pos} (Positively Buoyant, normalized)"] = arch_conc_pos_norm
+    # Negative
+    if arch_bin_nm_neg is not None:
+        arch_conc_neg_interp = np.interp(arch_bin_union, arch_bin_nm_neg, arch_conc_neg, left=np.nan, right=np.nan)
+        arch_conc_neg_norm = arch_conc_neg_interp / np.nanmax(arch_conc_neg_interp) if np.nanmax(arch_conc_neg_interp) > 0 else arch_conc_neg_interp
+        df_out[f"Archimedes {arch_timepoint_neg} (Negatively Buoyant, normalized)"] = arch_conc_neg_norm
+
+    # Interpolate DLS to same bins
+    interp_dls = np.interp(arch_bin_union, dls_diam_nm, dls_intensity, left=np.nan, right=np.nan)
+    interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
+    df_out["DLS Intensity (interpolated, normalized)"] = interp_dls_norm
 
     # --- GRAPH SECTION ---
-    st.header("Step 3: Visualization")
+    st.header("Step 5: Visualization")
     user_title = st.text_input("Enter graph title:", "Archimedes vs DLS Comparison")
-
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(df_out["Archimedes Bin Center (nm)"], df_out[f"Archimedes {arch_timepoint} (normalized)"], '-o', color='blue', label="Archimedes Concentration (normalized)")
-    ax.plot(df_out["Archimedes Bin Center (nm)"], df_out["DLS Intensity (interpolated, normalized)"], '-s', color='red', label="DLS Intensity (interpolated, normalized)")
+
+    # Plot the selected population
+    if pos_check and arch_bin_nm_pos is not None:
+        ax.plot(df_out["Archimedes Bin Center (nm)"], 
+                df_out[f"Archimedes {arch_timepoint_pos} (Positively Buoyant, normalized)"],
+                '-o', color='blue', label="Positively Buoyant Particles")
+    if neg_check and arch_bin_nm_neg is not None:
+        ax.plot(df_out["Archimedes Bin Center (nm)"], 
+                df_out[f"Archimedes {arch_timepoint_neg} (Negatively Buoyant, normalized)"],
+                '-^', color='green', label="Negatively Buoyant Particles")
+
+    # DLS always shown for context
+    ax.plot(df_out["Archimedes Bin Center (nm)"], 
+            df_out["DLS Intensity (interpolated, normalized)"],
+            '-s', color='red', label="DLS Intensity (interpolated, normalized)")
+
     ax.set_xlabel("Diameter (nm)")
     ax.set_ylabel("Normalized value (a.u.)")
     ax.set_ylim(0, 1.05)
@@ -90,7 +135,7 @@ if arch_file is not None and dls_file is not None and arch_timepoint and dls_tim
     )
 
     # --- DATA OUTPUT SECTION ---
-    st.header("Step 4: Output Data")
+    st.header("Step 6: Output Data")
     st.dataframe(df_out.head(25))
     excel_buffer = io.BytesIO()
     df_out.to_excel(excel_buffer, index=False)
@@ -102,4 +147,3 @@ if arch_file is not None and dls_file is not None and arch_timepoint and dls_tim
     )
 else:
     st.info("Upload both files and specify the time points to process and visualize your data.")
-
