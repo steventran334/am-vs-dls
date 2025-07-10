@@ -48,7 +48,7 @@ def process_arch_file(arch_file, arch_timepoint, arch_label):
     arch_df = arch_df[["Bin Center", "Average"]].copy()
     arch_df["Bin Center (nm)"] = pd.to_numeric(arch_df["Bin Center"], errors='coerce') * 1000
     arch_df = arch_df[["Bin Center (nm)", "Average"]].reset_index(drop=True)
-    label = f"AM - {arch_label} ({arch_timepoint})"
+    label = f"AM - {arch_label} (normalized)"
     arch_df.columns = ["Archimedes Bin Center (nm)", label]
     return arch_df["Archimedes Bin Center (nm)"].values, arch_df[label].values, arch_df, label
 
