@@ -16,19 +16,22 @@ st.header("Step 2: Upload DLS Data (.xlsx)")
 dls_file = st.file_uploader("Upload DLS Excel", type=["xlsx"], key="dls")
 dls_timepoint = None
 dls_timepoint_col = None
+dls_diam_col = None
 
 if dls_file is not None:
-    # Show available timepoints as columns (after "Diameter (nm)")
-    dls_df = pd.read_excel(dls_file, header=1)
-    dls_timepoint_options = [col for col in dls_df.columns if col.lower() != "diameter (nm)"]
-    dls_timepoint = st.selectbox("Select DLS time point:", dls_timepoint_options)
+    # Read the sheet using the first row as header
+    dls_df_preview = pd.read_excel(dls_file, header=0)
+    dls_columns = dls_df_preview.columns.tolist()
+    # Use the first column as diameters (robust to header name)
+    dls_diam_col = dls_columns[0]
+    dls_timepoint_options = dls_columns[1:]
+    dls_timepoint = st.selectbox("Select DLS time point column:", dls_timepoint_options)
     dls_timepoint_col = dls_timepoint
 
 # --- DATA PROCESSING ---
 if arch_file is not None and dls_file is not None and arch_timepoint and dls_timepoint:
     # Read and clean Archimedes
     arch_df = pd.read_csv(arch_file, skiprows=60)
-    # Remove non-numeric rows, keep only Bin Center and Average
     arch_df = arch_df[pd.to_numeric(arch_df["Bin Center"], errors="coerce").notna()]
     arch_df = arch_df[["Bin Center", "Average"]].copy()
     arch_df["Bin Center (nm)"] = pd.to_numeric(arch_df["Bin Center"], errors='coerce') * 1000
@@ -36,8 +39,8 @@ if arch_file is not None and dls_file is not None and arch_timepoint and dls_tim
     arch_df.columns = ["Archimedes Bin Center (nm)", f"Archimedes {arch_timepoint}"]
 
     # Read and extract DLS
-    dls_df = pd.read_excel(dls_file, header=1)
-    dls_df = dls_df[["Diameter (nm)", dls_timepoint_col]].copy()
+    dls_df = pd.read_excel(dls_file, header=0)
+    dls_df = dls_df[[dls_diam_col, dls_timepoint_col]].copy()
     dls_df.columns = ["DLS Diameter (nm)", f"DLS {dls_timepoint}"]
 
     # Interpolate DLS to Archimedes bins
