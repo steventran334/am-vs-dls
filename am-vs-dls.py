@@ -78,7 +78,7 @@ if pos_timepoint and arch_files1:
             arch_curves.append({
                 "bins": arch_bin_nm,
                 "conc": arch_conc,
-                "label": f"AM - {arch_label1} (normalized)",
+                "label": f"AM - {arch_label1}",
             })
 
 if neg_timepoint and arch_files2:
@@ -90,7 +90,7 @@ if neg_timepoint and arch_files2:
             arch_curves.append({
                 "bins": arch_bin_nm,
                 "conc": arch_conc,
-                "label": f"AM - {arch_label2} (normalized)",
+                "label": f"AM - {arch_label2}",
             })
 
 # --- PROCESS & VISUALIZE ---
