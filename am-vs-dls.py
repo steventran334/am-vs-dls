@@ -84,16 +84,27 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
     df_out["DLS Intensity (interpolated, normalized)"] = interp_dls_norm
 
-    # --- GRAPH SECTION ---
+        # --- GRAPH SECTION ---
     st.header("Step 3: Visualization")
     user_title = st.text_input("Enter graph title:", "Archimedes vs DLS Comparison")
     fig, ax = plt.subplots(figsize=(8, 5))
 
+    # Color mapping (robust to label content/case)
+    def get_color(label):
+        if "positively" in label.lower():
+            return "blue"
+        elif "negatively" in label.lower():
+            return "black"
+        else:
+            return "gray"
+
+    # Plot each population
     for curve in arch_curves:
         colname = curve["label"] + " (normalized)"
         ax.plot(df_out["Archimedes Bin Center (nm)"], df_out[colname],
-                '-o', color=colors.get(curve["label"].split(" ")[0], "gray"), label=curve["label"])
+                '-o', color=get_color(curve["label"]), label=curve["label"])
 
+    # DLS always in red
     ax.plot(df_out["Archimedes Bin Center (nm)"], 
             df_out["DLS Intensity (interpolated, normalized)"],
             '-s', color='red', label="DLS Intensity (interpolated, normalized)")
@@ -103,6 +114,7 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     ax.legend()
     ax.set_title(user_title)
     st.pyplot(fig)
+
 
     # Download SVG
     svg_buffer = io.StringIO()
