@@ -25,7 +25,6 @@ if arch_label1 == arch_label2 and arch_file2 is not None:
 
 # --- DLS DATA OPTIONS ---
 st.header("Step 2: DLS Data Settings & Upload")
-# DLS type selector
 dls_type = st.radio("Select DLS type:", ["Back scatter", "MADLS"], key="dls_type")
 dls_weight = st.radio("Select DLS weighting:", ["Intensity-weighted", "Volume-weighted", "Number-weighted"], key="dls_weight")
 dls_file = st.file_uploader("Upload DLS Excel", type=["xlsx"], key="dls")
@@ -35,7 +34,6 @@ dls_timepoint_col = None
 
 if dls_file is not None:
     dls_df_preview = pd.read_excel(dls_file, header=1)
-    # Present all non-diameter columns for selection
     dls_timepoint_options = [col for col in dls_df_preview.columns if col.lower() != "diameter (nm)"]
     dls_timepoint = st.selectbox("Select DLS time point:", dls_timepoint_options)
     dls_timepoint_col = dls_timepoint
@@ -88,13 +86,12 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     for curve in arch_curves:
         interp = np.interp(all_bins, curve["bins"], curve["conc"], left=np.nan, right=np.nan)
         interp_norm = interp / np.nanmax(interp) if np.nanmax(interp) > 0 else interp
-        df_out[curve["label"] + " (normalized)"] = interp_norm
+        df_out[curve["label"]] = interp_norm  # <--- Just use the label, no duplicate (normalized)
 
     # Interpolate DLS to same bins
     interp_dls = np.interp(all_bins, dls_diam_nm, dls_intensity, left=np.nan, right=np.nan)
     interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
 
-    # DLS label for legend and table
     dls_series_label = f"DLS {dls_type} {dls_weight} (interpolated, normalized)"
     df_out[dls_series_label] = interp_dls_norm
 
@@ -104,11 +101,10 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     fig, ax = plt.subplots(figsize=(8, 5))
 
     for curve in arch_curves:
-        colname = curve["label"] + " (normalized)"
+        colname = curve["label"]
         ax.plot(df_out["Archimedes Bin Center (nm)"], df_out[colname],
                 '-o', color=get_color(curve["label"]), label=curve["label"])
 
-    # DLS always in red, with new legend
     ax.plot(df_out["Archimedes Bin Center (nm)"], 
             df_out[dls_series_label],
             '-s', color='red', label=dls_series_label)
