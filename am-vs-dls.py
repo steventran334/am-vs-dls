@@ -21,7 +21,7 @@ def process_arch_file(arch_file, arch_label):
     arch_df = arch_df[["Bin Center", "Average"]].copy()
     arch_df["Bin Center (nm)"] = pd.to_numeric(arch_df["Bin Center"], errors='coerce') * 1000
     arch_df = arch_df[["Bin Center (nm)", "Average"]].reset_index(drop=True)
-    label = f"AM - {arch_label} (normalized)"
+    label = f"AM - {arch_label}"
     arch_df.columns = ["Archimedes Bin Center (nm)", label]
     return arch_df["Archimedes Bin Center (nm)"].values, arch_df[label].values, arch_df, label, arch_timepoint
 
@@ -121,7 +121,7 @@ if dls_file is not None and dls_timepoint and len(arch_curves) > 0:
     # Interpolate DLS to same bins
     interp_dls = np.interp(all_bins, dls_diam_nm, dls_intensity, left=np.nan, right=np.nan)
     interp_dls_norm = interp_dls / np.nanmax(interp_dls) if np.nanmax(interp_dls) > 0 else interp_dls
-    dls_series_label = f"DLS {dls_type} {dls_weight} (interpolated, normalized)"
+    dls_series_label = f"DLS {dls_type} {dls_weight} (interpolated)"
     df_out[dls_series_label] = interp_dls_norm
 
     # --- GRAPH SECTION ---
