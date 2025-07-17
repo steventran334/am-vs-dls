@@ -66,110 +66,149 @@ if (
                 return col
         return None
 
-    dls_types = [
-        ("back", "intensity"),
-        ("back", "number"),
-        ("back", "volume"),
-        ("madls", "intensity"),
-        ("madls", "number"),
-        ("madls", "volume"),
-    ]
-    plot_titles = [
-        "Back Scatter - Intensity",
-        "Back Scatter - Number",
-        "Back Scatter - Volume",
-        "MADLS - Intensity",
-        "MADLS - Number",
-        "MADLS - Volume",
-    ]
+    # --- Plotting and Export Helper ---
+    def get_plot_and_csvs(main_types, title_prefix):
+        plot_titles = [
+            f"{title_prefix} - Intensity",
+            f"{title_prefix} - Number",
+            f"{title_prefix} - Volume",
+        ]
+        weights = ["intensity", "number", "volume"]
+        figs = []
+        svg_files = []
+        csv_files = []
+        for i, (main, weight, title) in enumerate(zip(main_types, weights, plot_titles)):
+            size_col = find_col(dls, main, "size")
+            dist_col = find_col(dls, main, weight)
+            if size_col is None or dist_col is None:
+                continue
+            x = dls[size_col].astype(float).values
+            y = dls[dist_col].astype(float).values
+            msk = ~np.isnan(x) & ~np.isnan(y)
+            x, y = x[msk], y[msk]
+            interp_pos = np.interp(pos_bin_nm, x, y, left=0, right=0)
+            interp_pos_norm = interp_pos / np.max(interp_pos) if np.max(interp_pos) > 0 else interp_pos
 
-    st.header(f"Plots for: {sheet_selected}")
+            # Pad for CSV output
+            n_rows = max(len(pos_bin_nm), len(x))
+            pad = lambda arr, l: np.pad(arr, (0, l - len(arr)), constant_values=np.nan)
+            df_csv = pd.DataFrame({
+                "Archimedes Diameter (nm)": pad(pos_bin_nm, n_rows),
+                f"{conc_col_pos} (particles/mL)": pad(pos_conc, n_rows),
+                f"{conc_col_pos} (normalized by max)": pad(pos_norm_max, n_rows),
+                "DLS Diameter (nm)": pad(x, n_rows),
+                "DLS Intensity (%)": pad(y, n_rows),
+                "DLS (interpolated to AM)": pad(interp_pos, n_rows),
+                "DLS (interpolated, normalized by max)": pad(interp_pos_norm, n_rows)
+            })
 
-    # Store SVGs and CSVs for zipping
-    back_svg_files, back_csv_files = [], []
-    madls_svg_files, madls_csv_files = [], []
+            # Plot
+            fig, ax = plt.subplots(figsize=(5,4))
+            ax.plot(pos_bin_nm, pos_norm_max, label="AM POS", color='blue', lw=2)
+            ax.plot(neg_bin_nm, neg_norm_max, label="AM NEG", color='red', lw=2)
+            ax.plot(pos_bin_nm, interp_pos_norm, label="DLS", color='black', lw=2, linestyle=":")
+            ax.set_xlim([0, 1000])
+            ax.set_ylim([0, 1.1])
+            ax.set_xticks([0, 200, 400, 600, 800, 1000])
+            ax.set_xticklabels(['0', '200', '400', '600', '800', '1000'])
+            ax.set_xlabel("Diameter (nm)")
+            ax.set_ylabel("Normalized Value (by max)")
+            ax.set_title(title)
+            ax.legend()
+            figs.append(fig)
 
-    for idx, ((main, weight), title) in enumerate(zip(dls_types, plot_titles)):
-        size_col = find_col(dls, main, "size")
-        dist_col = find_col(dls, main, weight)
-        if size_col is None or dist_col is None:
-            st.warning(f"Columns not found for {title}. Skipping...")
-            continue
-        x = dls[size_col].astype(float).values
-        y = dls[dist_col].astype(float).values
-        msk = ~np.isnan(x) & ~np.isnan(y)
-        x, y = x[msk], y[msk]
-        interp_pos = np.interp(pos_bin_nm, x, y, left=0, right=0)
-        interp_pos_norm = interp_pos / np.max(interp_pos) if np.max(interp_pos) > 0 else interp_pos
+            # Save SVG and CSV in memory for zipping
+            svg_buf = io.StringIO()
+            fig.savefig(svg_buf, format="svg", bbox_inches='tight')
+            svg_data = svg_buf.getvalue()
+            fname_base = f"{sheet_selected}_{title.replace(' ','_')}"
+            svg_files.append((f"{fname_base}.svg", svg_data))
+            csv_data = df_csv.to_csv(index=False)
+            csv_files.append((f"{fname_base}.csv", csv_data))
+            plt.close(fig)
+        return figs, svg_files, csv_files
 
-        # Pad for CSV output
-        n_rows = max(len(pos_bin_nm), len(x))
-        pad = lambda arr, l: np.pad(arr, (0, l - len(arr)), constant_values=np.nan)
-        df_csv = pd.DataFrame({
-            "Archimedes Diameter (nm)": pad(pos_bin_nm, n_rows),
-            f"{conc_col_pos} (particles/mL)": pad(pos_conc, n_rows),
-            f"{conc_col_pos} (normalized by max)": pad(pos_norm_max, n_rows),
-            "DLS Diameter (nm)": pad(x, n_rows),
-            "DLS Intensity (%)": pad(y, n_rows),
-            "DLS (interpolated to AM)": pad(interp_pos, n_rows),
-            "DLS (interpolated, normalized by max)": pad(interp_pos_norm, n_rows)
-        })
-
-        st.subheader(title)
-        # Plot
-        fig, ax = plt.subplots(figsize=(6,4))
-        ax.plot(pos_bin_nm, pos_norm_max, label="AM POS", color='blue', lw=2)
-        ax.plot(neg_bin_nm, neg_norm_max, label="AM NEG", color='red', lw=2)
-        ax.plot(pos_bin_nm, interp_pos_norm, label="DLS", color='black', lw=2, linestyle=":")
-        ax.set_xlim([0, 1000])
-        ax.set_ylim([0, 1.1])
-        ax.set_xticks([0, 200, 400, 600, 800, 1000])
-        ax.set_xticklabels(['0', '200', '400', '600', '800', '1000'])
-        ax.set_xlabel("Diameter (nm)")
-        ax.set_ylabel("Normalized Value (by max)")
-        ax.set_title(title)
-        ax.legend()
+    # --- BACK SCATTER PREVIEW & DOWNLOAD ---
+    st.subheader("Back Scatter Distributions")
+    back_figs, back_svg_files, back_csv_files = get_plot_and_csvs(["back"]*3, "Back Scatter")
+    if back_figs:
+        fig, axs = plt.subplots(1, 3, figsize=(16, 5), sharey=True)
+        for i, f in enumerate(back_figs):
+            ax = axs[i]
+            tmp = f.axes[0]
+            for line in tmp.lines:
+                ax.plot(line.get_xdata(), line.get_ydata(),
+                        label=line.get_label(), color=line.get_color(),
+                        lw=line.get_linewidth(), linestyle=line.get_linestyle())
+            ax.set_xlim(tmp.get_xlim())
+            ax.set_ylim(tmp.get_ylim())
+            ax.set_xticks(tmp.get_xticks())
+            ax.set_xticklabels(tmp.get_xticklabels())
+            ax.set_xlabel(tmp.get_xlabel())
+            ax.set_title(tmp.get_title())
+            if i == 0:
+                ax.set_ylabel(tmp.get_ylabel())
+            ax.legend()
+        plt.tight_layout()
         st.pyplot(fig)
-
-        # Save SVG and CSV in memory for zipping
-        svg_buf = io.StringIO()
-        fig.savefig(svg_buf, format="svg", bbox_inches='tight')
-        svg_data = svg_buf.getvalue()
-        csv_data = df_csv.to_csv(index=False)
-        fname_base = f"{sheet_selected}_{title.replace(' ','_')}"
-        if idx < 3:
-            back_svg_files.append((f"{fname_base}.svg", svg_data))
-            back_csv_files.append((f"{fname_base}.csv", csv_data))
-        else:
-            madls_svg_files.append((f"{fname_base}.svg", svg_data))
-            madls_csv_files.append((f"{fname_base}.csv", csv_data))
         plt.close(fig)
 
-    # --- Download ZIPs for back scatter and MADLS ---
-    def make_zip(name_pairs):
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zf:
-            for fname, data in name_pairs:
-                zf.writestr(fname, data)
-        return zip_buffer.getvalue()
+        # --- DOWNLOAD ZIP ---
+        def make_zip(name_pairs):
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as zf:
+                for fname, data in name_pairs:
+                    zf.writestr(fname, data)
+            return zip_buffer.getvalue()
 
-    st.markdown("### Download all Back Scatter graphs and CSVs")
-    if st.button("Download Back Scatter (SVG+CSV) ZIP"):
-        zip_bytes = make_zip(back_svg_files + back_csv_files)
         st.download_button(
-            label="Click here to download Back Scatter ZIP",
-            data=zip_bytes,
-            file_name=f"{sheet_selected}_BackScatter.zip",
+            label="Download All Back Scatter SVGs (ZIP)",
+            data=make_zip(back_svg_files),
+            file_name=f"{sheet_selected}_BackScatter_SVGs.zip",
+            mime="application/zip"
+        )
+        st.download_button(
+            label="Download All Back Scatter CSVs (ZIP)",
+            data=make_zip(back_csv_files),
+            file_name=f"{sheet_selected}_BackScatter_CSVs.zip",
             mime="application/zip"
         )
 
-    st.markdown("### Download all MADLS graphs and CSVs")
-    if st.button("Download MADLS (SVG+CSV) ZIP"):
-        zip_bytes = make_zip(madls_svg_files + madls_csv_files)
+    # --- MADLS PREVIEW & DOWNLOAD ---
+    st.subheader("MADLS Distributions")
+    madls_figs, madls_svg_files, madls_csv_files = get_plot_and_csvs(["madls"]*3, "MADLS")
+    if madls_figs:
+        fig, axs = plt.subplots(1, 3, figsize=(16, 5), sharey=True)
+        for i, f in enumerate(madls_figs):
+            ax = axs[i]
+            tmp = f.axes[0]
+            for line in tmp.lines:
+                ax.plot(line.get_xdata(), line.get_ydata(),
+                        label=line.get_label(), color=line.get_color(),
+                        lw=line.get_linewidth(), linestyle=line.get_linestyle())
+            ax.set_xlim(tmp.get_xlim())
+            ax.set_ylim(tmp.get_ylim())
+            ax.set_xticks(tmp.get_xticks())
+            ax.set_xticklabels(tmp.get_xticklabels())
+            ax.set_xlabel(tmp.get_xlabel())
+            ax.set_title(tmp.get_title())
+            if i == 0:
+                ax.set_ylabel(tmp.get_ylabel())
+            ax.legend()
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
         st.download_button(
-            label="Click here to download MADLS ZIP",
-            data=zip_bytes,
-            file_name=f"{sheet_selected}_MADLS.zip",
+            label="Download All MADLS SVGs (ZIP)",
+            data=make_zip(madls_svg_files),
+            file_name=f"{sheet_selected}_MADLS_SVGs.zip",
+            mime="application/zip"
+        )
+        st.download_button(
+            label="Download All MADLS CSVs (ZIP)",
+            data=make_zip(madls_csv_files),
+            file_name=f"{sheet_selected}_MADLS_CSVs.zip",
             mime="application/zip"
         )
 
