@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import io
 
 st.title("Archimedes POS/NEG vs DLS Comparison")
 
@@ -22,7 +23,7 @@ if am_pos_files:
     pos_conc = df_pos[conc_col_pos].astype(float).values
     pos_norm_max = pos_conc / np.max(pos_conc) if np.max(pos_conc) != 0 else pos_conc
 else:
-    pos_bin_nm = pos_conc = pos_norm_max = None
+    pos_bin_nm = pos_conc = pos_norm_max = conc_col_pos = None
 
 # --- AM NEG Upload ---
 am_neg_files = st.file_uploader(
@@ -41,23 +42,29 @@ if am_neg_files:
     neg_conc = df_neg[conc_col_neg].astype(float).values
     neg_norm_max = neg_conc / np.max(neg_conc) if np.max(neg_conc) != 0 else neg_conc
 else:
-    neg_bin_nm = neg_conc = neg_norm_max = None
+    neg_bin_nm = neg_conc = neg_norm_max = conc_col_neg = None
 
 # --- DLS upload and dropdown ---
 dls_file = st.file_uploader("Upload DLS Excel file", type=["xlsx"])
 sheet_selected = None
-if dls_file and pos_bin_nm is not None and neg_bin_nm is not None:
+
+if (
+    dls_file
+    and pos_bin_nm is not None and neg_bin_nm is not None
+    and conc_col_pos is not None and conc_col_neg is not None
+):
     xls = pd.ExcelFile(dls_file)
     sheets = xls.sheet_names
     sheet_selected = st.selectbox("Select DLS condition (sheet)", sheets)
     dls = pd.read_excel(xls, sheet_name=sheet_selected, header=[0,1,2], skiprows=[0,1])
-    # Helper to find columns
+
     def find_col(dls, type_main, weight):
         for col in dls.columns:
             col_str = ' '.join(str(c).lower() for c in col)
             if type_main in col_str and weight in col_str:
                 return col
         return None
+
     dls_types = [
         ("back", "intensity"),
         ("back", "number"),
@@ -74,19 +81,38 @@ if dls_file and pos_bin_nm is not None and neg_bin_nm is not None:
         "MADLS - Number",
         "MADLS - Volume",
     ]
-    fig, axs = plt.subplots(2, 3, figsize=(18, 8), sharex=True, sharey=True)
+
+    st.header(f"Plots for: {sheet_selected}")
+
     for idx, ((main, weight), title) in enumerate(zip(dls_types, plot_titles)):
-        ax = axs[idx // 3, idx % 3]
         size_col = find_col(dls, main, "size")
         dist_col = find_col(dls, main, weight)
+        if size_col is None or dist_col is None:
+            st.warning(f"Columns not found for {title}. Skipping...")
+            continue
         x = dls[size_col].astype(float).values
         y = dls[dist_col].astype(float).values
         msk = ~np.isnan(x) & ~np.isnan(y)
         x, y = x[msk], y[msk]
         interp_pos = np.interp(pos_bin_nm, x, y, left=0, right=0)
-        interp_neg = np.interp(neg_bin_nm, x, y, left=0, right=0)
         interp_pos_norm = interp_pos / np.max(interp_pos) if np.max(interp_pos) > 0 else interp_pos
-        # Lines: DLS = black dotted, POS = blue, NEG = red
+
+        # Pad for CSV output
+        n_rows = max(len(pos_bin_nm), len(x))
+        pad = lambda arr, l: np.pad(arr, (0, l - len(arr)), constant_values=np.nan)
+        df_csv = pd.DataFrame({
+            "Archimedes Diameter (nm)": pad(pos_bin_nm, n_rows),
+            f"{conc_col_pos} (particles/mL)": pad(pos_conc, n_rows),
+            f"{conc_col_pos} (normalized by max)": pad(pos_norm_max, n_rows),
+            "DLS Diameter (nm)": pad(x, n_rows),
+            "DLS Intensity (%)": pad(y, n_rows),
+            "DLS (interpolated to AM)": pad(interp_pos, n_rows),
+            "DLS (interpolated, normalized by max)": pad(interp_pos_norm, n_rows)
+        })
+
+        st.subheader(title)
+        # Plot
+        fig, ax = plt.subplots(figsize=(6,4))
         ax.plot(pos_bin_nm, pos_norm_max, label="AM POS", color='blue', lw=2)
         ax.plot(neg_bin_nm, neg_norm_max, label="AM NEG", color='red', lw=2)
         ax.plot(pos_bin_nm, interp_pos_norm, label="DLS", color='black', lw=2, linestyle=":")
@@ -95,14 +121,31 @@ if dls_file and pos_bin_nm is not None and neg_bin_nm is not None:
         ax.set_xticks([0, 200, 400, 600, 800, 1000])
         ax.set_xticklabels(['0', '200', '400', '600', '800', '1000'])
         ax.set_xlabel("Diameter (nm)")
-        ax.set_title(title, fontsize=17, pad=16)
-        if idx == 0:
-            ax.legend()
-        if idx % 3 == 0:
-            ax.set_ylabel("Normalized Value (by max)")
-    fig.suptitle(sheet_selected, fontsize=28)
-    plt.tight_layout(rect=[0,0,1,0.95])
-    st.pyplot(fig)
-else:
-    st.warning("Upload Archimedes POS & NEG files and a DLS Excel file to generate plots.")
+        ax.set_ylabel("Normalized Value (by max)")
+        ax.set_title(title)
+        ax.legend()
+        st.pyplot(fig)
 
+        # SVG download
+        svg_buf = io.StringIO()
+        fig.savefig(svg_buf, format="svg", bbox_inches='tight')
+        svg_data = svg_buf.getvalue()
+        st.download_button(
+            label="Download Plot (SVG)",
+            data=svg_data,
+            file_name=f"{sheet_selected}_{title.replace(' ','_')}.svg",
+            mime="image/svg+xml"
+        )
+        plt.close(fig)
+
+        # CSV download
+        csv_data = df_csv.to_csv(index=False)
+        st.download_button(
+            label="Download Data (CSV)",
+            data=csv_data,
+            file_name=f"{sheet_selected}_{title.replace(' ','_')}.csv",
+            mime="text/csv"
+        )
+
+else:
+    st.info("Upload POS & NEG Archimedes files, select both, and upload/select a DLS Excel file and condition (sheet) to view plots and downloads.")
