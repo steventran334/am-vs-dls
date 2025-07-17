@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import io
+import zipfile
 
 st.title("Archimedes POS/NEG vs DLS Comparison")
 
@@ -84,6 +85,10 @@ if (
 
     st.header(f"Plots for: {sheet_selected}")
 
+    # Store SVGs and CSVs for zipping
+    back_svg_files, back_csv_files = [], []
+    madls_svg_files, madls_csv_files = [], []
+
     for idx, ((main, weight), title) in enumerate(zip(dls_types, plot_titles)):
         size_col = find_col(dls, main, "size")
         dist_col = find_col(dls, main, weight)
@@ -126,25 +131,46 @@ if (
         ax.legend()
         st.pyplot(fig)
 
-        # SVG download
+        # Save SVG and CSV in memory for zipping
         svg_buf = io.StringIO()
         fig.savefig(svg_buf, format="svg", bbox_inches='tight')
         svg_data = svg_buf.getvalue()
-        st.download_button(
-            label="Download Plot (SVG)",
-            data=svg_data,
-            file_name=f"{sheet_selected}_{title.replace(' ','_')}.svg",
-            mime="image/svg+xml"
-        )
+        csv_data = df_csv.to_csv(index=False)
+        fname_base = f"{sheet_selected}_{title.replace(' ','_')}"
+        if idx < 3:
+            back_svg_files.append((f"{fname_base}.svg", svg_data))
+            back_csv_files.append((f"{fname_base}.csv", csv_data))
+        else:
+            madls_svg_files.append((f"{fname_base}.svg", svg_data))
+            madls_csv_files.append((f"{fname_base}.csv", csv_data))
         plt.close(fig)
 
-        # CSV download
-        csv_data = df_csv.to_csv(index=False)
+    # --- Download ZIPs for back scatter and MADLS ---
+    def make_zip(name_pairs):
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
+            for fname, data in name_pairs:
+                zf.writestr(fname, data)
+        return zip_buffer.getvalue()
+
+    st.markdown("### Download all Back Scatter graphs and CSVs")
+    if st.button("Download Back Scatter (SVG+CSV) ZIP"):
+        zip_bytes = make_zip(back_svg_files + back_csv_files)
         st.download_button(
-            label="Download Data (CSV)",
-            data=csv_data,
-            file_name=f"{sheet_selected}_{title.replace(' ','_')}.csv",
-            mime="text/csv"
+            label="Click here to download Back Scatter ZIP",
+            data=zip_bytes,
+            file_name=f"{sheet_selected}_BackScatter.zip",
+            mime="application/zip"
+        )
+
+    st.markdown("### Download all MADLS graphs and CSVs")
+    if st.button("Download MADLS (SVG+CSV) ZIP"):
+        zip_bytes = make_zip(madls_svg_files + madls_csv_files)
+        st.download_button(
+            label="Click here to download MADLS ZIP",
+            data=zip_bytes,
+            file_name=f"{sheet_selected}_MADLS.zip",
+            mime="application/zip"
         )
 
 else:
