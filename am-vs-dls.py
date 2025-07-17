@@ -22,7 +22,7 @@ Drop your files below.
 </div>
 """, unsafe_allow_html=True)
 
-st.image("dls_example.png", caption="Example DLS spreadsheet format", use_column_width=True)
+st.image("dls_example.png", caption="Example DLS spreadsheet format", use_container_width=True)
 
 # --- AM POS Upload ---
 am_pos_files = st.file_uploader(
