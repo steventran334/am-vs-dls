@@ -7,6 +7,23 @@ import zipfile
 
 st.title("Archimedes POS/NEG vs DLS Comparison")
 
+st.markdown("""
+<div style="background-color:#E8F0FE;padding:16px 24px 16px 24px;border-radius:14px;margin-bottom:20px;">
+<b>Instructions:</b><br>
+Archimedes graphs can be dropped in straight from Archimedes software.<br><br>
+<b>DLS graphs must be formatted exactly:</b>
+<ul style="margin-top:0;margin-bottom:0;">
+<li>Sheet name: name of experiment (e.g. stock of NBs)</li>
+<li>Back scatter data: in columns starting at column A</li>
+<li>MADLS data: in columns starting at column H</li>
+<li>Each contains intensity, number, and volume weighted distributions</li>
+</ul>
+Drop your files below.
+</div>
+""", unsafe_allow_html=True)
+
+st.image("dls_example.png", caption="Example DLS spreadsheet format", use_column_width=True)
+
 # --- AM POS Upload ---
 am_pos_files = st.file_uploader(
     "Upload Archimedes POS CSV files", type="csv", accept_multiple_files=True, key="pos")
