@@ -76,6 +76,10 @@ if (
     sheet_selected = st.selectbox("Select DLS condition (sheet)", sheets)
     dls = pd.read_excel(xls, sheet_name=sheet_selected, header=[0,1,2], skiprows=[0,1])
 
+    # --- CUSTOM TITLE INPUT ---
+    # This box lets you type the title that appears on the graph
+    custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected} Comparison")
+
     def find_col(dls, type_main, weight):
         for col in dls.columns:
             col_str = ' '.join(str(c).lower() for c in col)
@@ -92,7 +96,6 @@ if (
         ]
         weights = ["intensity", "number", "volume"]
         figs = []
-        svg_files = []
         csv_files = []
         for i, (main, weight, title) in enumerate(zip(main_types, weights, plot_titles)):
             size_col = find_col(dls, main, "size")
@@ -119,7 +122,7 @@ if (
                 "DLS (interpolated, normalized by max)": pad(interp_pos_norm, n_rows)
             })
 
-            # Plot
+            # Plot - Individual plots (hidden but used for calculation)
             fig, ax = plt.subplots(figsize=(5,4))
             ax.plot(pos_bin_nm, pos_norm_max, label="AM POS", color='blue', lw=2)
             ax.plot(neg_bin_nm, neg_norm_max, label="AM NEG", color='red', lw=2)
@@ -141,11 +144,24 @@ if (
             plt.close(fig)
         return figs, csv_files
 
+    # --- ZIP Helper ---
+    def make_zip(name_pairs):
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
+            for fname, data in name_pairs:
+                zf.writestr(fname, data)
+        return zip_buffer.getvalue()
+
     # --- BACK SCATTER PREVIEW & DOWNLOAD ---
     st.subheader("Back Scatter Distributions")
     back_figs, back_csv_files = get_plot_and_csvs(["back"]*3, "Back Scatter")
     if back_figs:
+        # Create the 1x3 combined figure
         fig, axs = plt.subplots(1, 3, figsize=(16, 5), sharey=True)
+        
+        # Add the CUSTOM TITLE to the entire figure
+        fig.suptitle(custom_title, fontsize=20)
+
         for i, f in enumerate(back_figs):
             ax = axs[i]
             tmp = f.axes[0]
@@ -164,6 +180,7 @@ if (
             ax.legend()
         plt.tight_layout()
         st.pyplot(fig)
+        
         # SVG download (as 1x3 panel)
         svg_buf = io.StringIO()
         fig.savefig(svg_buf, format="svg", bbox_inches='tight')
@@ -174,13 +191,8 @@ if (
             mime="image/svg+xml"
         )
         plt.close(fig)
+        
         # CSVs as ZIP
-        def make_zip(name_pairs):
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w") as zf:
-                for fname, data in name_pairs:
-                    zf.writestr(fname, data)
-            return zip_buffer.getvalue()
         st.download_button(
             label="Download All Back Scatter CSVs (ZIP)",
             data=make_zip(back_csv_files),
@@ -193,6 +205,10 @@ if (
     madls_figs, madls_csv_files = get_plot_and_csvs(["madls"]*3, "MADLS")
     if madls_figs:
         fig, axs = plt.subplots(1, 3, figsize=(16, 5), sharey=True)
+        
+        # Add the CUSTOM TITLE to the entire figure
+        fig.suptitle(custom_title, fontsize=20)
+        
         for i, f in enumerate(madls_figs):
             ax = axs[i]
             tmp = f.axes[0]
@@ -211,6 +227,7 @@ if (
             ax.legend()
         plt.tight_layout()
         st.pyplot(fig)
+        
         # SVG download (as 1x3 panel)
         svg_buf = io.StringIO()
         fig.savefig(svg_buf, format="svg", bbox_inches='tight')
@@ -221,6 +238,7 @@ if (
             mime="image/svg+xml"
         )
         plt.close(fig)
+        
         # CSVs as ZIP
         st.download_button(
             label="Download All MADLS CSVs (ZIP)",
