@@ -24,43 +24,118 @@ Drop your files below.
 
 st.image("dls_example.png", caption="Example DLS spreadsheet format", use_container_width=True)
 
-# --- AM POS Upload ---
+# --- CALLBACKS FOR SYNCING ---
+# These functions run whenever a user changes a dropdown
+def update_neg_from_pos():
+    """When POS changes, update NEG to the same list index."""
+    if "pos_select" in st.session_state and "neg_select" in st.session_state:
+        # Get current POS selection
+        selection = st.session_state.pos_select
+        # Find its index in the sorted POS list
+        # (We need access to the sorted list, which we define below in the main body)
+        # To access variables from main scope in callback, we can rely on session state or global, 
+        # but here we will re-calculate or assume lists are available.
+        # Safer approach: Check if we have the lists in session state or just use the logic below.
+        pass # The logic is better handled directly if we have access to the lists.
+        # See implementation inside the main block below where lists exist.
+
+# --- FILE UPLOADS ---
 am_pos_files = st.file_uploader(
     "Upload Archimedes POS CSV files", type="csv", accept_multiple_files=True, key="pos")
-am_pos_selected = None
-if am_pos_files:
-    am_pos_file_names = [f.name for f in am_pos_files]
-    am_pos_selected = st.selectbox("Select POS data file", am_pos_file_names, key="pos_select")
-    am_pos_idx = am_pos_file_names.index(am_pos_selected)
-    am_pos_file = am_pos_files[am_pos_idx]
-    df_pos = pd.read_csv(am_pos_file, skiprows=60)
-    df_pos = df_pos[pd.to_numeric(df_pos["Bin Center"], errors="coerce").notna()]
-    pos_bin_nm = df_pos["Bin Center"].astype(float).values * 1000  # µm to nm
-    col_idx_pos = list(df_pos.columns).index("Bin Center")
-    conc_col_pos = df_pos.columns[col_idx_pos + 1]
-    pos_conc = df_pos[conc_col_pos].astype(float).values
-    pos_norm_max = pos_conc / np.max(pos_conc) if np.max(pos_conc) != 0 else pos_conc
-else:
-    pos_bin_nm = pos_conc = pos_norm_max = conc_col_pos = None
-
-# --- AM NEG Upload ---
 am_neg_files = st.file_uploader(
     "Upload Archimedes NEG CSV files", type="csv", accept_multiple_files=True, key="neg")
-am_neg_selected = None
+
+# Prepare sorted lists and maps (filename -> file object)
+pos_map = {}
+pos_names = []
+if am_pos_files:
+    pos_map = {f.name: f for f in am_pos_files}
+    pos_names = sorted(list(pos_map.keys()))
+
+neg_map = {}
+neg_names = []
 if am_neg_files:
-    am_neg_file_names = [f.name for f in am_neg_files]
-    am_neg_selected = st.selectbox("Select NEG data file", am_neg_file_names, key="neg_select")
-    am_neg_idx = am_neg_file_names.index(am_neg_selected)
-    am_neg_file = am_neg_files[am_neg_idx]
-    df_neg = pd.read_csv(am_neg_file, skiprows=60)
-    df_neg = df_neg[pd.to_numeric(df_neg["Bin Center"], errors="coerce").notna()]
-    neg_bin_nm = df_neg["Bin Center"].astype(float).values * 1000  # µm to nm
-    col_idx_neg = list(df_neg.columns).index("Bin Center")
-    conc_col_neg = df_neg.columns[col_idx_neg + 1]
-    neg_conc = df_neg[conc_col_neg].astype(float).values
-    neg_norm_max = neg_conc / np.max(neg_conc) if np.max(neg_conc) != 0 else neg_conc
-else:
-    neg_bin_nm = neg_conc = neg_norm_max = conc_col_neg = None
+    neg_map = {f.name: f for f in am_neg_files}
+    neg_names = sorted(list(neg_map.keys()))
+
+# --- SYNC LOGIC DEFINITION ---
+# We define these here so they capture 'pos_names' and 'neg_names' from the current run
+def sync_neg():
+    """Sync NEG dropdown to match POS index"""
+    if "pos_select" in st.session_state and neg_names:
+        current_pos = st.session_state.pos_select
+        try:
+            # Find index of current POS file
+            idx = pos_names.index(current_pos)
+            # Apply to NEG if index exists
+            if idx < len(neg_names):
+                st.session_state.neg_select = neg_names[idx]
+        except ValueError:
+            pass
+
+def sync_pos():
+    """Sync POS dropdown to match NEG index"""
+    if "neg_select" in st.session_state and pos_names:
+        current_neg = st.session_state.neg_select
+        try:
+            # Find index of current NEG file
+            idx = neg_names.index(current_neg)
+            # Apply to POS if index exists
+            if idx < len(pos_names):
+                st.session_state.pos_select = pos_names[idx]
+        except ValueError:
+            pass
+
+# --- DROPDOWNS ---
+col1, col2 = st.columns(2)
+
+am_pos_selected = None
+df_pos = None
+pos_bin_nm = pos_conc = pos_norm_max = conc_col_pos = None
+
+with col1:
+    if pos_names:
+        am_pos_selected = st.selectbox(
+            "Select POS data file", 
+            pos_names, 
+            key="pos_select", 
+            on_change=sync_neg  # Trigger sync when changed
+        )
+        # Retrieve the actual file object using the map
+        am_pos_file = pos_map[am_pos_selected]
+        
+        # Process POS Data
+        df_pos = pd.read_csv(am_pos_file, skiprows=60)
+        df_pos = df_pos[pd.to_numeric(df_pos["Bin Center"], errors="coerce").notna()]
+        pos_bin_nm = df_pos["Bin Center"].astype(float).values * 1000  # µm to nm
+        col_idx_pos = list(df_pos.columns).index("Bin Center")
+        conc_col_pos = df_pos.columns[col_idx_pos + 1]
+        pos_conc = df_pos[conc_col_pos].astype(float).values
+        pos_norm_max = pos_conc / np.max(pos_conc) if np.max(pos_conc) != 0 else pos_conc
+
+am_neg_selected = None
+df_neg = None
+neg_bin_nm = neg_conc = neg_norm_max = conc_col_neg = None
+
+with col2:
+    if neg_names:
+        am_neg_selected = st.selectbox(
+            "Select NEG data file", 
+            neg_names, 
+            key="neg_select", 
+            on_change=sync_pos # Trigger sync when changed
+        )
+        # Retrieve the actual file object using the map
+        am_neg_file = neg_map[am_neg_selected]
+
+        # Process NEG Data
+        df_neg = pd.read_csv(am_neg_file, skiprows=60)
+        df_neg = df_neg[pd.to_numeric(df_neg["Bin Center"], errors="coerce").notna()]
+        neg_bin_nm = df_neg["Bin Center"].astype(float).values * 1000  # µm to nm
+        col_idx_neg = list(df_neg.columns).index("Bin Center")
+        conc_col_neg = df_neg.columns[col_idx_neg + 1]
+        neg_conc = df_neg[conc_col_neg].astype(float).values
+        neg_norm_max = neg_conc / np.max(neg_conc) if np.max(neg_conc) != 0 else neg_conc
 
 # --- DLS upload and dropdown ---
 dls_file = st.file_uploader("Upload DLS Excel file", type=["xlsx"])
@@ -77,8 +152,7 @@ if (
     dls = pd.read_excel(xls, sheet_name=sheet_selected, header=[0,1,2], skiprows=[0,1])
 
     # --- CUSTOM TITLE INPUT ---
-    # This box lets you type the title that appears on the graph
-    custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected}")
+    custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected} Comparison")
 
     def find_col(dls, type_main, weight):
         for col in dls.columns:
@@ -122,7 +196,7 @@ if (
                 "DLS (interpolated, normalized by max)": pad(interp_pos_norm, n_rows)
             })
 
-            # Plot - Individual plots (hidden but used for calculation)
+            # Plot - Individual (hidden)
             fig, ax = plt.subplots(figsize=(5,4))
             ax.plot(pos_bin_nm, pos_norm_max, label="AM POS", color='blue', lw=2)
             ax.plot(neg_bin_nm, neg_norm_max, label="AM NEG", color='red', lw=2)
@@ -137,7 +211,7 @@ if (
             ax.legend()
             figs.append(fig)
 
-            # Save CSV in memory for zipping
+            # Save CSV
             csv_data = df_csv.to_csv(index=False)
             fname_base = f"{sheet_selected}_{title.replace(' ','_')}"
             csv_files.append((f"{fname_base}.csv", csv_data))
@@ -156,10 +230,7 @@ if (
     st.subheader("Back Scatter Distributions")
     back_figs, back_csv_files = get_plot_and_csvs(["back"]*3, "Back Scatter")
     if back_figs:
-        # Create the 1x3 combined figure
         fig, axs = plt.subplots(1, 3, figsize=(16, 5), sharey=True)
-        
-        # Add the CUSTOM TITLE to the entire figure
         fig.suptitle(custom_title, fontsize=20)
 
         for i, f in enumerate(back_figs):
@@ -181,7 +252,6 @@ if (
         plt.tight_layout()
         st.pyplot(fig)
         
-        # SVG download (as 1x3 panel)
         svg_buf = io.StringIO()
         fig.savefig(svg_buf, format="svg", bbox_inches='tight')
         st.download_button(
@@ -191,8 +261,6 @@ if (
             mime="image/svg+xml"
         )
         plt.close(fig)
-        
-        # CSVs as ZIP
         st.download_button(
             label="Download All Back Scatter CSVs (ZIP)",
             data=make_zip(back_csv_files),
@@ -205,8 +273,6 @@ if (
     madls_figs, madls_csv_files = get_plot_and_csvs(["madls"]*3, "MADLS")
     if madls_figs:
         fig, axs = plt.subplots(1, 3, figsize=(16, 5), sharey=True)
-        
-        # Add the CUSTOM TITLE to the entire figure
         fig.suptitle(custom_title, fontsize=20)
         
         for i, f in enumerate(madls_figs):
@@ -228,7 +294,6 @@ if (
         plt.tight_layout()
         st.pyplot(fig)
         
-        # SVG download (as 1x3 panel)
         svg_buf = io.StringIO()
         fig.savefig(svg_buf, format="svg", bbox_inches='tight')
         st.download_button(
@@ -238,8 +303,6 @@ if (
             mime="image/svg+xml"
         )
         plt.close(fig)
-        
-        # CSVs as ZIP
         st.download_button(
             label="Download All MADLS CSVs (ZIP)",
             data=make_zip(madls_csv_files),
