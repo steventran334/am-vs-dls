@@ -78,7 +78,7 @@ if (
 
     # --- CUSTOM TITLE INPUT ---
     # This box lets you type the title that appears on the graph
-    custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected} Comparison")
+    custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected}")
 
     def find_col(dls, type_main, weight):
         for col in dls.columns:
