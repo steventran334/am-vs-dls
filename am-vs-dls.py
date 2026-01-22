@@ -152,7 +152,7 @@ if (
     dls = pd.read_excel(xls, sheet_name=sheet_selected, header=[0,1,2], skiprows=[0,1])
 
     # --- CUSTOM TITLE INPUT ---
-    custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected} Comparison")
+    custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected}")
 
     def find_col(dls, type_main, weight):
         for col in dls.columns:
