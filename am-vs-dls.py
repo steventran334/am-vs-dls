@@ -22,22 +22,13 @@ Drop your files below.
 </div>
 """, unsafe_allow_html=True)
 
-st.image("dls_example.png", caption="Example DLS spreadsheet format", use_container_width=True)
+# st.image("dls_example.png", caption="Example DLS spreadsheet format", use_container_width=True) 
+# (Commented out image as I do not have the file, uncomment if you have it locally)
 
 # --- CALLBACKS FOR SYNCING ---
-# These functions run whenever a user changes a dropdown
 def update_neg_from_pos():
     """When POS changes, update NEG to the same list index."""
-    if "pos_select" in st.session_state and "neg_select" in st.session_state:
-        # Get current POS selection
-        selection = st.session_state.pos_select
-        # Find its index in the sorted POS list
-        # (We need access to the sorted list, which we define below in the main body)
-        # To access variables from main scope in callback, we can rely on session state or global, 
-        # but here we will re-calculate or assume lists are available.
-        # Safer approach: Check if we have the lists in session state or just use the logic below.
-        pass # The logic is better handled directly if we have access to the lists.
-        # See implementation inside the main block below where lists exist.
+    pass # Logic handled in sync_neg/sync_pos below
 
 # --- FILE UPLOADS ---
 am_pos_files = st.file_uploader(
@@ -59,7 +50,6 @@ if am_neg_files:
     neg_names = sorted(list(neg_map.keys()))
 
 # --- SYNC LOGIC DEFINITION ---
-# We define these here so they capture 'pos_names' and 'neg_names' from the current run
 def sync_neg():
     """Sync NEG dropdown to match POS index"""
     if "pos_select" in st.session_state and neg_names:
@@ -105,6 +95,8 @@ with col1:
         am_pos_file = pos_map[am_pos_selected]
         
         # Process POS Data
+        # Reset file pointer just in case
+        am_pos_file.seek(0)
         df_pos = pd.read_csv(am_pos_file, skiprows=60)
         df_pos = df_pos[pd.to_numeric(df_pos["Bin Center"], errors="coerce").notna()]
         pos_bin_nm = df_pos["Bin Center"].astype(float).values * 1000  # µm to nm
@@ -127,8 +119,10 @@ with col2:
         )
         # Retrieve the actual file object using the map
         am_neg_file = neg_map[am_neg_selected]
-
+        
         # Process NEG Data
+        # Reset file pointer just in case
+        am_neg_file.seek(0)
         df_neg = pd.read_csv(am_neg_file, skiprows=60)
         df_neg = df_neg[pd.to_numeric(df_neg["Bin Center"], errors="coerce").notna()]
         neg_bin_nm = df_neg["Bin Center"].astype(float).values * 1000  # µm to nm
@@ -176,10 +170,14 @@ if (
             dist_col = find_col(dls, main, weight)
             if size_col is None or dist_col is None:
                 continue
+            
+            # RAW DLS DATA (Correct for Plotting)
             x = dls[size_col].astype(float).values
             y = dls[dist_col].astype(float).values
             msk = ~np.isnan(x) & ~np.isnan(y)
             x, y = x[msk], y[msk]
+            
+            # INTERPOLATED DLS DATA (Correct for CSV Comparison)
             interp_pos = np.interp(pos_bin_nm, x, y, left=0, right=0)
             interp_pos_norm = interp_pos / np.max(interp_pos) if np.max(interp_pos) > 0 else interp_pos
 
@@ -200,11 +198,17 @@ if (
             fig, ax = plt.subplots(figsize=(5,4))
             ax.plot(pos_bin_nm, pos_norm_max, label="AM POS", color='blue', lw=2)
             ax.plot(neg_bin_nm, neg_norm_max, label="AM NEG", color='red', lw=2)
-            ax.plot(pos_bin_nm, interp_pos_norm, label="DLS", color='black', lw=2, linestyle=":")
-            ax.set_xlim([0, 1000])
-            ax.set_ylim([0, 1.1])
-            ax.set_xticks([0, 200, 400, 600, 800, 1000])
-            ax.set_xticklabels(['0', '200', '400', '600', '800', '1000'])
+            
+            # --- FIX: Plot RAW DLS data instead of interpolated ---
+            # We normalize y by its max to match the scale of the other lines
+            y_norm_plot = y / np.max(y) if np.max(y) > 0 else y
+            ax.plot(x, y_norm_plot, label="DLS", color='black', lw=2, linestyle=":")
+            
+            # --- FIX: Remove Hardcoded Limits so graph expands ---
+            # ax.set_xlim([0, 1000])  <-- REMOVED
+            # ax.set_xticks([...])    <-- REMOVED
+            
+            ax.set_xlim(left=0) # Optional: Ensure it starts at 0
             ax.set_xlabel("Diameter (nm)")
             ax.set_ylabel("Normalized Value (by max)")
             ax.set_title(title)
@@ -242,8 +246,9 @@ if (
                         lw=line.get_linewidth(), linestyle=line.get_linestyle())
             ax.set_xlim(tmp.get_xlim())
             ax.set_ylim(tmp.get_ylim())
-            ax.set_xticks(tmp.get_xticks())
-            ax.set_xticklabels(tmp.get_xticklabels())
+            # Let matplotlib handle ticks automatically now that range is dynamic
+            # ax.set_xticks(tmp.get_xticks()) 
+            # ax.set_xticklabels(tmp.get_xticklabels())
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
             if i == 0:
@@ -284,8 +289,9 @@ if (
                         lw=line.get_linewidth(), linestyle=line.get_linestyle())
             ax.set_xlim(tmp.get_xlim())
             ax.set_ylim(tmp.get_ylim())
-            ax.set_xticks(tmp.get_xticks())
-            ax.set_xticklabels(tmp.get_xticklabels())
+            # Let matplotlib handle ticks automatically
+            # ax.set_xticks(tmp.get_xticks())
+            # ax.set_xticklabels(tmp.get_xticklabels())
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
             if i == 0:
