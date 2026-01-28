@@ -131,7 +131,6 @@ if (
     custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected}")
     
     # --- X-AXIS SLIDER ---
-    # Default is 1000 nm, user can slide to expand
     x_axis_limit = st.slider("Adjust Max X-Axis Limit (nm)", min_value=500, max_value=10000, value=1000, step=100)
 
     def find_col(dls, type_main, weight):
@@ -232,6 +231,12 @@ if (
             ax.set_xlim(0, x_axis_limit)
             ax.set_ylim(tmp.get_ylim())
 
+            # --- MOVED X-AXIS TO Y=0 ---
+            ax.spines['bottom'].set_position(('data', 0))
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            # ---------------------------
+
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
             if i == 0:
@@ -274,6 +279,12 @@ if (
             # Apply Limit to Preview
             ax.set_xlim(0, x_axis_limit)
             ax.set_ylim(tmp.get_ylim())
+
+            # --- MOVED X-AXIS TO Y=0 ---
+            ax.spines['bottom'].set_position(('data', 0))
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            # ---------------------------
 
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
