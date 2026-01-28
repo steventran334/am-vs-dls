@@ -231,11 +231,12 @@ if (
             ax.set_xlim(0, x_axis_limit)
             ax.set_ylim(tmp.get_ylim())
 
-            # --- MOVED X-AXIS TO Y=0 ---
-            ax.spines['bottom'].set_position(('data', 0))
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            # ---------------------------
+            # --- RESTORED BOX FRAME ---
+            ax.spines['top'].set_visible(True)
+            ax.spines['right'].set_visible(True)
+            ax.spines['bottom'].set_visible(True)
+            ax.spines['left'].set_visible(True)
+            # --------------------------
 
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
@@ -280,11 +281,12 @@ if (
             ax.set_xlim(0, x_axis_limit)
             ax.set_ylim(tmp.get_ylim())
 
-            # --- MOVED X-AXIS TO Y=0 ---
-            ax.spines['bottom'].set_position(('data', 0))
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            # ---------------------------
+            # --- RESTORED BOX FRAME ---
+            ax.spines['top'].set_visible(True)
+            ax.spines['right'].set_visible(True)
+            ax.spines['bottom'].set_visible(True)
+            ax.spines['left'].set_visible(True)
+            # --------------------------
 
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
