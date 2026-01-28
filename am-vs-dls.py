@@ -22,13 +22,9 @@ Drop your files below.
 </div>
 """, unsafe_allow_html=True)
 
-# st.image("dls_example.png", caption="Example DLS spreadsheet format", use_container_width=True) 
-# (Commented out image as I do not have the file, uncomment if you have it locally)
-
 # --- CALLBACKS FOR SYNCING ---
 def update_neg_from_pos():
-    """When POS changes, update NEG to the same list index."""
-    pass # Logic handled in sync_neg/sync_pos below
+    pass 
 
 # --- FILE UPLOADS ---
 am_pos_files = st.file_uploader(
@@ -36,7 +32,7 @@ am_pos_files = st.file_uploader(
 am_neg_files = st.file_uploader(
     "Upload Archimedes NEG CSV files", type="csv", accept_multiple_files=True, key="neg")
 
-# Prepare sorted lists and maps (filename -> file object)
+# Prepare sorted lists and maps
 pos_map = {}
 pos_names = []
 if am_pos_files:
@@ -51,26 +47,20 @@ if am_neg_files:
 
 # --- SYNC LOGIC DEFINITION ---
 def sync_neg():
-    """Sync NEG dropdown to match POS index"""
     if "pos_select" in st.session_state and neg_names:
         current_pos = st.session_state.pos_select
         try:
-            # Find index of current POS file
             idx = pos_names.index(current_pos)
-            # Apply to NEG if index exists
             if idx < len(neg_names):
                 st.session_state.neg_select = neg_names[idx]
         except ValueError:
             pass
 
 def sync_pos():
-    """Sync POS dropdown to match NEG index"""
     if "neg_select" in st.session_state and pos_names:
         current_neg = st.session_state.neg_select
         try:
-            # Find index of current NEG file
             idx = neg_names.index(current_neg)
-            # Apply to POS if index exists
             if idx < len(pos_names):
                 st.session_state.pos_select = pos_names[idx]
         except ValueError:
@@ -89,17 +79,13 @@ with col1:
             "Select POS data file", 
             pos_names, 
             key="pos_select", 
-            on_change=sync_neg  # Trigger sync when changed
+            on_change=sync_neg 
         )
-        # Retrieve the actual file object using the map
         am_pos_file = pos_map[am_pos_selected]
-        
-        # Process POS Data
-        # Reset file pointer just in case
         am_pos_file.seek(0)
         df_pos = pd.read_csv(am_pos_file, skiprows=60)
         df_pos = df_pos[pd.to_numeric(df_pos["Bin Center"], errors="coerce").notna()]
-        pos_bin_nm = df_pos["Bin Center"].astype(float).values * 1000  # µm to nm
+        pos_bin_nm = df_pos["Bin Center"].astype(float).values * 1000 
         col_idx_pos = list(df_pos.columns).index("Bin Center")
         conc_col_pos = df_pos.columns[col_idx_pos + 1]
         pos_conc = df_pos[conc_col_pos].astype(float).values
@@ -115,17 +101,13 @@ with col2:
             "Select NEG data file", 
             neg_names, 
             key="neg_select", 
-            on_change=sync_pos # Trigger sync when changed
+            on_change=sync_pos 
         )
-        # Retrieve the actual file object using the map
         am_neg_file = neg_map[am_neg_selected]
-        
-        # Process NEG Data
-        # Reset file pointer just in case
         am_neg_file.seek(0)
         df_neg = pd.read_csv(am_neg_file, skiprows=60)
         df_neg = df_neg[pd.to_numeric(df_neg["Bin Center"], errors="coerce").notna()]
-        neg_bin_nm = df_neg["Bin Center"].astype(float).values * 1000  # µm to nm
+        neg_bin_nm = df_neg["Bin Center"].astype(float).values * 1000 
         col_idx_neg = list(df_neg.columns).index("Bin Center")
         conc_col_neg = df_neg.columns[col_idx_neg + 1]
         neg_conc = df_neg[conc_col_neg].astype(float).values
@@ -147,6 +129,10 @@ if (
 
     # --- CUSTOM TITLE INPUT ---
     custom_title = st.text_input("Enter a custom title for the graph:", value=f"{sheet_selected}")
+    
+    # --- X-AXIS SLIDER ---
+    # Default is 1000 nm, user can slide to expand
+    x_axis_limit = st.slider("Adjust Max X-Axis Limit (nm)", min_value=500, max_value=10000, value=1000, step=100)
 
     def find_col(dls, type_main, weight):
         for col in dls.columns:
@@ -199,16 +185,13 @@ if (
             ax.plot(pos_bin_nm, pos_norm_max, label="AM POS", color='blue', lw=2)
             ax.plot(neg_bin_nm, neg_norm_max, label="AM NEG", color='red', lw=2)
             
-            # --- FIX: Plot RAW DLS data instead of interpolated ---
-            # We normalize y by its max to match the scale of the other lines
+            # Plot RAW DLS data
             y_norm_plot = y / np.max(y) if np.max(y) > 0 else y
             ax.plot(x, y_norm_plot, label="DLS", color='black', lw=2, linestyle=":")
             
-            # --- FIX: Remove Hardcoded Limits so graph expands ---
-            # ax.set_xlim([0, 1000])  <-- REMOVED
-            # ax.set_xticks([...])    <-- REMOVED
+            # Apply User-Selected Limit
+            ax.set_xlim(left=0, right=x_axis_limit)
             
-            ax.set_xlim(left=0) # Optional: Ensure it starts at 0
             ax.set_xlabel("Diameter (nm)")
             ax.set_ylabel("Normalized Value (by max)")
             ax.set_title(title)
@@ -244,11 +227,11 @@ if (
                 ax.plot(line.get_xdata(), line.get_ydata(),
                         label=line.get_label(), color=line.get_color(),
                         lw=line.get_linewidth(), linestyle=line.get_linestyle())
-            ax.set_xlim(tmp.get_xlim())
+            
+            # Apply Limit to Preview
+            ax.set_xlim(0, x_axis_limit)
             ax.set_ylim(tmp.get_ylim())
-            # Let matplotlib handle ticks automatically now that range is dynamic
-            # ax.set_xticks(tmp.get_xticks()) 
-            # ax.set_xticklabels(tmp.get_xticklabels())
+
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
             if i == 0:
@@ -287,11 +270,11 @@ if (
                 ax.plot(line.get_xdata(), line.get_ydata(),
                         label=line.get_label(), color=line.get_color(),
                         lw=line.get_linewidth(), linestyle=line.get_linestyle())
-            ax.set_xlim(tmp.get_xlim())
+            
+            # Apply Limit to Preview
+            ax.set_xlim(0, x_axis_limit)
             ax.set_ylim(tmp.get_ylim())
-            # Let matplotlib handle ticks automatically
-            # ax.set_xticks(tmp.get_xticks())
-            # ax.set_xticklabels(tmp.get_xticklabels())
+
             ax.set_xlabel(tmp.get_xlabel())
             ax.set_title(tmp.get_title())
             if i == 0:
